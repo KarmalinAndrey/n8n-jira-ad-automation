@@ -1,0 +1,665 @@
+{
+  "name": "SD-AD-ChangeManager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_UUID",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -608,
+        -224
+      ],
+      "id": "e1cf0d44-81fc-4f54-b06f-5502157eb045",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_UUID",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "EUS-Jira-Webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Tag execution with ticket key for easy lookup in n8n executions list\n$execution.customData.set('', $json.issue?.key || $json.issue_key || $json.key || $json.body?.issueKey || 'unknown');\n\nreturn $input.item;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        -224
+      ],
+      "id": "de3fb2b4-d4d6-45db-817d-7af0f06c90de",
+      "name": "Tag Execution"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nconst issueKey = body.issueKey;\nconst managerId = body.directManager.id;\nconst users = body.users;\n\nreturn users.map(user => ({\n  json: {\n    ticket: issueKey,\n    managerId: managerId,\n    userId: user.id\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -224
+      ],
+      "id": "1be22123-f14b-4961-940d-9dfdfc02fba3",
+      "name": "Parse Users & Manager"
+    },
+    {
+      "parameters": {
+        "url": "=https://YOUR_COMPANY.atlassian.net/rest/api/3/user?accountId={{ $('Parse Users & Manager').first().json.managerId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -16,
+        -224
+      ],
+      "id": "c66de4c4-cb97-419b-8cf3-72f186812ca5",
+      "name": "Get Manager from Jira",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Agent CRED sanbox"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "baseDN": "OU=YOUR_OU,DC=YOUR_DOMAIN,DC=LOCAL",
+        "searchFor": "(objectclass=user)",
+        "attribute": "displayName",
+        "searchText": "={{ $('Get Manager from Jira').item.json.displayName }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.ldap",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -240
+      ],
+      "id": "977f2dda-d82b-4198-8d9a-deff7a3be074",
+      "name": "Find Manager in AD",
+      "credentials": {
+        "ldap": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "EUS-AD-[System Account] n8n ldap bind"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://YOUR_COMPANY.atlassian.net/rest/api/3/user?accountId={{ $('Parse Users & Manager').item.json.userId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        656,
+        -272
+      ],
+      "id": "c8dc89ff-4e5c-41a3-a090-e56cc6505079",
+      "name": "Get User from Jira",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Agent CRED sanbox"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "baseDN": "OU=YOUR_OU,DC=YOUR_DOMAIN,DC=LOCAL",
+        "searchFor": "(objectclass=user)",
+        "attribute": "displayName",
+        "searchText": "={{ $('Get User from Jira').item.json.displayName }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.ldap",
+      "typeVersion": 1,
+      "position": [
+        848,
+        -288
+      ],
+      "id": "16aaa4ef-9b23-4a19-bd70-85589ba1b14b",
+      "name": "Find User in AD",
+      "credentials": {
+        "ldap": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "EUS-AD-[System Account] n8n ldap bind"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d9da4c1f-c33f-4cda-9188-b8bea8bf8f47",
+              "leftValue": "={{ $json.manager }}",
+              "rightValue": "={{ $('Find Manager in AD').item.json.dn }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        -320
+      ],
+      "id": "2697db5a-0c71-43f7-b724-70fb8448ead9",
+      "name": "Manager Already Set?"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dn": "={{ $('Find User in AD').item.json.dn }}",
+        "attributes": {
+          "replace": [
+            {
+              "id": "manager",
+              "value": "={{ $('Find Manager in AD').item.json.dn }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.ldap",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        -304
+      ],
+      "id": "b5801175-487f-4703-9441-c346ea0dc9ec",
+      "name": "Update Manager in AD",
+      "credentials": {
+        "ldap": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "EUS-AD-[System Account] n8n AD operator"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "098f060d-b7d0-4e69-bae2-9be141683f5a",
+              "name": "Message",
+              "value": "=Error in \"{{ $prevNode.name }}\" step:\n{{ $json.error }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        144
+      ],
+      "id": "049c333f-0abe-4aab-af49-232b6b2c74e5",
+      "name": "Error message"
+    },
+    {
+      "parameters": {
+        "resource": "issueComment",
+        "issueKey": "={{ $('Parse Users & Manager').first().json.ticket }}",
+        "comment": "={{ $json.Message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        144
+      ],
+      "id": "a2503f9e-cd59-4cfa-9c34-8de6acad2aa8",
+      "name": "Jira comment",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Agent CRED sanbox"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "098f060d-b7d0-4e69-bae2-9be141683f5a",
+              "name": "Message",
+              "value": "=Manager updated successfully.\nEmployee: {{ $('Get User from Jira').item.json.displayName }}\nPrevious Manager: {{ $('Find User in AD').item.json.manager.split(',')[0].replace('CN=', '') }}\nNew Manager: {{ $('Get Manager from Jira').item.json.displayName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1488,
+        144
+      ],
+      "id": "a894f42f-6ea5-4345-8ae1-b9aadd038332",
+      "name": "Comment: Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "098f060d-b7d0-4e69-bae2-9be141683f5a",
+              "name": "Message",
+              "value": "=Manager not found in AD: {{ $('Get Manager from Jira').item.json.displayName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        144
+      ],
+      "id": "d7211934-647f-479c-9471-ff8976632784",
+      "name": "Comment: Manager Not Found"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "098f060d-b7d0-4e69-bae2-9be141683f5a",
+              "name": "Message",
+              "value": "=User not found in AD: {{ $('Get User from Jira').item.json.displayName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        848,
+        144
+      ],
+      "id": "11e0f698-3eeb-4b01-8d11-bbebd303720d",
+      "name": "Comment: User Not Found"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "098f060d-b7d0-4e69-bae2-9be141683f5a",
+              "name": "Message",
+              "value": "=Skipped: Manager already set for {{ $('Get User from Jira').item.json.displayName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1248,
+        144
+      ],
+      "id": "62d5615a-8b81-41a0-9e62-8c7348243bf1",
+      "name": "Comment: Already Up to Date"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bba3c15a-7dee-4c3d-aa62-39b48d510326",
+              "leftValue": "={{ $json.dn }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        432,
+        -256
+      ],
+      "id": "0420b4b9-e2e1-4cb6-89b2-7a39344c94d2",
+      "name": "Find Manager?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bba3c15a-7dee-4c3d-aa62-39b48d510326",
+              "leftValue": "={{ $json.dn }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1056,
+        -304
+      ],
+      "id": "ffa049f6-6ede-45c9-9bbe-36e6ad36cccb",
+      "name": "Find User?"
+    }
+  ],
+
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Tag Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Execution": {
+      "main": [
+        [
+          {
+            "node": "Parse Users & Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Users & Manager": {
+      "main": [
+        [
+          {
+            "node": "Get Manager from Jira",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Manager from Jira": {
+      "main": [
+        [
+          {
+            "node": "Find Manager in AD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Manager in AD": {
+      "main": [
+        [
+          {
+            "node": "Find Manager?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment: Manager Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User from Jira": {
+      "main": [
+        [
+          {
+            "node": "Find User in AD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find User in AD": {
+      "main": [
+        [
+          {
+            "node": "Find User?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment: User Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manager Already Set?": {
+      "main": [
+        [
+          {
+            "node": "Comment: Already Up to Date",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Manager in AD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Manager in AD": {
+      "main": [
+        [
+          {
+            "node": "Comment: Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error message": {
+      "main": [
+        [
+          {
+            "node": "Jira comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment: Success": {
+      "main": [
+        [
+          {
+            "node": "Jira comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment: Manager Not Found": {
+      "main": [
+        [
+          {
+            "node": "Jira comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment: User Not Found": {
+      "main": [
+        [
+          {
+            "node": "Jira comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment: Already Up to Date": {
+      "main": [
+        [
+          {
+            "node": "Jira comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Manager?": {
+      "main": [
+        [
+          {
+            "node": "Get User from Jira",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment: Manager Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find User?": {
+      "main": [
+        [
+          {
+            "node": "Manager Already Set?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment: User Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6a34ce65-9de5-4944-bd73-27c57fccad17",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCE_ID"
+  },
+  "id": "_kHJMU__dL3cz52b_go55",
+  "tags": []
+}
