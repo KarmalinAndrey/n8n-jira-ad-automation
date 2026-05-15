@@ -1,5 +1,7 @@
 # SD-AD-ChangeManager
 
+![Workflow Overview](ChangeManager_Screen.png)
+
 An n8n workflow that automatically updates the "Manager" attribute
 in Active Directory based on data from a Jira ticket.
 
